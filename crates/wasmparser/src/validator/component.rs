@@ -168,7 +168,14 @@ impl ComponentState {
             || core_ty.returns.as_ref() != results.as_slice()
         {
             return Err(BinaryReaderError::new(
-                "lowered function type does not match core function type",
+                format!("lowered function parameters {:?} (type index {type_index}) do not match parameter types {:?} of core function {func_index}", params.as_slice(), core_ty.params),
+                offset,
+            ));
+        }
+
+        if core_ty.returns.as_ref() != results.as_slice() {
+            return Err(BinaryReaderError::new(
+                format!("lowered function results {:?} (type index {type_index}) do not match result types {:?} of core function {func_index}", results.as_slice(), core_ty.returns),
                 offset,
             ));
         }
