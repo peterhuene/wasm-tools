@@ -714,13 +714,13 @@ impl InterfaceType {
         types: &TypeList,
         lowered_types: &mut LoweredTypes,
     ) -> bool {
-        if cases.len() <= u32::max_value() as usize {
-            lowered_types.push(Type::I32);
+        let maxed = if cases.len() <= u32::max_value() as usize {
+            lowered_types.push(Type::I32)
         } else {
-            lowered_types.push(Type::I64);
-        }
+            lowered_types.push(Type::I64)
+        };
 
-        if lowered_types.maxed() {
+        if !maxed {
             return false;
         }
 
@@ -735,8 +735,13 @@ impl InterfaceType {
 
             for (i, ty) in temp.iter().enumerate() {
                 match lowered_types.types.get_mut(start + i) {
-                    Some(prev) => *prev = Self::join_types(*prev, ty),
+                    Some(prev) => {
+                        println!("joining type {:?} with {:?}", *prev, ty);
+                        *prev = Self::join_types(*prev, ty);
+                        println!("result is {:?}", *prev);
+                    }
                     None => {
+                        println!("pushing type {:#?}", ty);
                         if !lowered_types.push(ty) {
                             return false;
                         }
@@ -744,6 +749,8 @@ impl InterfaceType {
                 }
             }
         }
+
+        println!("result: {:#?}", lowered_types.as_slice());
 
         true
     }
