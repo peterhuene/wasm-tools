@@ -85,16 +85,26 @@ impl<'a> ComponentWorld<'a> {
     /// main module or they're part of the adapter's exports.
     fn process_adapters(&mut self) -> Result<()> {
         let resolve = &self.encoder.metadata.resolve;
-        for (name, (wasm, metadata, world)) in self.encoder.adapters.iter() {
+        for (name, wasm) in self.encoder.adapters.iter() {
             let required_by_import = self.info.adapters_required.get(name.as_str());
-            let required = self.required_adapter_exports(resolve, *world, required_by_import);
+            let required = self.required_adapter_exports(
+                resolve,
+                self.encoder.metadata.world,
+                required_by_import,
+            );
             if required.is_empty() {
                 continue;
             }
             let wasm = crate::gc::run(wasm, &required, self.info.realloc)
                 .context("failed to reduce input adapter module to its minimal size")?;
-            let info = validate_adapter_module(&wasm, resolve, *world, metadata, &required)
-                .context("failed to validate the imports of the minimized adapter module")?;
+            let info = validate_adapter_module(
+                &wasm,
+                resolve,
+                self.encoder.metadata.world,
+                &self.encoder.metadata.metadata,
+                &required,
+            )
+            .context("failed to validate the imports of the minimized adapter module")?;
             self.adapters.insert(name, (info, wasm));
         }
         Ok(())
@@ -166,18 +176,6 @@ impl<'a> ComponentWorld<'a> {
                 item,
                 &self.info.required_imports,
             )?;
-        }
-        for (adapter_name, (info, _wasm)) in self.adapters.iter() {
-            let (_, _, world) = self.encoder.adapters[*adapter_name];
-            for (name, item) in resolve.worlds[world].imports.iter() {
-                add_item(
-                    &mut self.import_map,
-                    resolve,
-                    name,
-                    item,
-                    &info.required_imports,
-                )?;
-            }
         }
         return Ok(());
 
@@ -267,13 +265,13 @@ impl<'a> ComponentWorld<'a> {
         for (_, item) in world.exports.iter() {
             live.add_world_item(resolve, item);
         }
-        for (adapter_name, (info, _wasm)) in self.adapters.iter() {
-            let (_, _, world) = self.encoder.adapters[*adapter_name];
-            self.add_live_imports(world, &info.required_imports, &mut live);
-            for (_, item) in resolve.worlds[world].exports.iter() {
-                live.add_world_item(resolve, item);
-            }
-        }
+        // for (adapter_name, (info, _wasm)) in self.adapters.iter() {
+        //     let wasm = self.encoder.adapters[*adapter_name];
+        //     self.add_live_imports(world, &info.required_imports, &mut live);
+        //     for (_, item) in resolve.worlds[world].exports.iter() {
+        //         live.add_world_item(resolve, item);
+        //     }
+        // }
 
         for live in live.iter() {
             let owner = match resolve.types[live].owner {

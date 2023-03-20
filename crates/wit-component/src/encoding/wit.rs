@@ -67,7 +67,7 @@ impl Encoder<'_> {
         // in an interface for this document. That's done to assist with the
         // decoding process where everyone's view of a foreign document agrees
         // notably on the order that types are defined in to assist with
-        // roundtripping.
+        // round-tripping.
         let mut interfaces = IndexSet::new();
         for (_, id) in self.resolve.documents[doc].interfaces.iter() {
             self.add_live_interfaces(&mut interfaces, *id);

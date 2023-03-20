@@ -83,7 +83,7 @@ use wasm_encoder::*;
 use wasmparser::{Validator, WasmFeatures};
 use wit_parser::{
     abi::{AbiVariant, WasmSignature, WasmType},
-    Function, InterfaceId, Resolve, Type, TypeDefKind, TypeId, TypeOwner, WorldId, WorldItem,
+    Function, InterfaceId, Resolve, Type, TypeDefKind, TypeId, TypeOwner, WorldItem,
 };
 
 const INDIRECT_TABLE_NAME: &str = "$imports";
@@ -466,6 +466,7 @@ impl<'a> EncodingState<'a> {
         // Don't encode empty instance types since they're not
         // meaningful to the runtime of the component anyway.
         if ty.is_empty() {
+            println!("empty instance type for `{name}`");
             return Ok(());
         }
         let instance_type_idx = self.component.instance_type(&ty);
@@ -511,6 +512,13 @@ impl<'a> EncodingState<'a> {
             .name
             .as_ref()
             .expect("cannot import anonymous type across interfaces");
+        for (id, i) in &self.info.encoder.metadata.resolve.interfaces {
+            println!("interface: {name:?} ({id:?})", name = i.name);
+        }
+        dbg!(name);
+        dbg!(&self.info.encoder.metadata.resolve.interfaces[interface].name);
+        dbg!(&self.imported_instances);
+        dbg!(&interface);
         let instance = self
             .exported_instances
             .get(&interface)
@@ -633,10 +641,7 @@ impl<'a> EncodingState<'a> {
 
     fn encode_exports(&mut self, module: CustomModule) -> Result<()> {
         let resolve = &self.info.encoder.metadata.resolve;
-        let world = match module {
-            CustomModule::Main => self.info.encoder.metadata.world,
-            CustomModule::Adapter(name) => self.info.encoder.adapters[name].2,
-        };
+        let world = self.info.encoder.metadata.world;
         let world = &resolve.worlds[world];
         for (export_name, export) in world.exports.iter() {
             match export {
@@ -810,10 +815,7 @@ impl<'a> EncodingState<'a> {
         ty: u32,
     ) -> Result<u32> {
         let resolve = &self.info.encoder.metadata.resolve;
-        let metadata = match module {
-            CustomModule::Main => &self.info.encoder.metadata.metadata,
-            CustomModule::Adapter(name) => &self.info.encoder.adapters[name].1,
-        };
+        let metadata = &self.info.encoder.metadata.metadata;
         let instance_index = match module {
             CustomModule::Main => self.instance_index.expect("instantiated by now"),
             CustomModule::Adapter(name) => self.adapter_instances[name],
@@ -1343,14 +1345,10 @@ pub struct ComponentEncoder {
     metadata: Bindgen,
     validate: bool,
 
-    // This is a map from the name of the adapter to a pair of:
-    //
-    // * The wasm of the adapter itself, with `component-type` sections
-    //   stripped.
-    // * the metadata for the adapter, verified to have no exports and only
-    //   imports.
-    // * The world within `self.metadata.doc` which the adapter works with.
-    adapters: IndexMap<String, (Vec<u8>, ModuleMetadata, WorldId)>,
+    // This is a map from the name of the adapter to the wasm of the adapter
+    // itself. The wasm of the adapter itself is the wasm of the adapter with
+    // the `component-type` sections stripped.
+    adapters: IndexMap<String, Vec<u8>>,
 }
 
 impl ComponentEncoder {
@@ -1395,12 +1393,11 @@ impl ComponentEncoder {
     /// in the core wasm that's being wrapped.
     pub fn adapter(mut self, name: &str, bytes: &[u8]) -> Result<Self> {
         let (wasm, metadata) = metadata::decode(bytes)?;
+        self.metadata.merge(metadata)?;
         // Merge the adapter's document into our own document to have one large
         // document, but the adapter's world isn't merged in to our world so
         // retain it separately.
-        let world = self.metadata.resolve.merge(metadata.resolve).worlds[metadata.world.index()];
-        self.adapters
-            .insert(name.to_string(), (wasm, metadata.metadata, world));
+        self.adapters.insert(name.to_string(), wasm);
         Ok(self)
     }
 
